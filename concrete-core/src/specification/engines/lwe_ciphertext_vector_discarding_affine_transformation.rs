@@ -26,7 +26,8 @@ pub trait LweCiphertextVectorDiscardingAffineTransformationEngine<
     OutputCiphertext,
 >: AbstractEngine where
     OutputCiphertext: LweCiphertextEntity,
-    CiphertextVector: LweCiphertextVectorEntity<KeyDistribution = OutputCiphertext::KeyDistribution>,
+    CiphertextVector:
+        LweCiphertextVectorEntity<KeyDistribution = OutputCiphertext::KeyDistribution>,
     CleartextVector: CleartextVectorEntity,
     Plaintext: PlaintextEntity,
 {
@@ -43,7 +44,7 @@ pub trait LweCiphertextVectorDiscardingAffineTransformationEngine<
     ///
     /// # Safety
     /// For the _general_ safety concerns regarding this operation, refer to the different variants
-    /// of [`LweCiphertextDiscardingAffineTransformationError`]. For safety concerns _specific_ to an
+    /// of [`LweCiphertextVectorDiscardingAffineTransformationError`]. For safety concerns _specific_ to an
     /// engine, refer to the implementer safety section.
     unsafe fn discard_affine_transform_lwe_ciphertext_vector_unchecked(
         &mut self,
