@@ -1,8 +1,6 @@
 //! A module containing sampling entry points for raw integers
-use concrete_commons::dispersion::{DispersionParameter, Variance};
 use concrete_commons::numeric::{CastInto, UnsignedInteger};
 use concrete_core::backends::core::private::math::random::RandomGenerator;
-use kolmogorov_smirnov;
 
 /// A trait to generate raw unsigned integer values.
 pub trait RawUnsignedIntegers: UnsignedInteger + CastInto<f64> {
@@ -14,7 +12,7 @@ pub trait RawUnsignedIntegers: UnsignedInteger + CastInto<f64> {
     fn uniform_vec(size: usize) -> Vec<Self>;
     fn uniform_n_msb(n: usize) -> Self;
     fn uniform_n_msb_vec(n: usize, size: usize) -> Vec<Self>;
-    fn uniform_weight() -> Self;
+    fn uniform_zero_centered() -> Self;
 }
 
 impl RawUnsignedIntegers for u32 {
@@ -48,7 +46,7 @@ impl RawUnsignedIntegers for u32 {
             .random_uniform_n_msb_tensor(size, n)
             .into_container()
     }
-    fn uniform_weight() -> Self {
+    fn uniform_zero_centered() -> Self {
         let val: u32 = Self::uniform();
         let val = val % 1024u32;
         let val: i32 = val as i32;
@@ -88,7 +86,7 @@ impl RawUnsignedIntegers for u64 {
             .random_uniform_n_msb_tensor(size, n)
             .into_container()
     }
-    fn uniform_weight() -> Self {
+    fn uniform_zero_centered() -> Self {
         let val: u64 = Self::uniform();
         let val = val % 1024u64;
         let val: i64 = val as i64;

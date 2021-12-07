@@ -1,7 +1,6 @@
 //! A module containing statistical testing entry points for raw integers
 use crate::raw::generation::RawUnsignedIntegers;
 use concrete_commons::dispersion::{DispersionParameter, Variance};
-use concrete_commons::numeric::{CastInto, UnsignedInteger};
 use concrete_core::backends::core::private::math::random::RandomGenerator;
 use kolmogorov_smirnov;
 
