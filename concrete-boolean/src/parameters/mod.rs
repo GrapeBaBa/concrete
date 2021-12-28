@@ -17,6 +17,7 @@
 //! Note that if you desire, you can also create your own set of parameters.
 //! This is an unsafe operation as failing to properly fix the parameters will potentially result
 //! with an incorrect and/or insecure computation.
+// TODO: speak about the lattice estimator and give the explicit used commit for the parameters
 
 use concrete_commons::dispersion::StandardDev;
 use concrete_commons::parameters::{
