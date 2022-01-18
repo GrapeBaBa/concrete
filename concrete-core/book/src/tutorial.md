@@ -11,24 +11,33 @@ create your backend are:
 Let's see how to do this in more details. For the sake of this tutorial, we're going to be adding a
 GPU backend to `concrete-core`, but it could be any other hardware.
 
+## Prerequisites
+
 Before following any of the steps shown in this tutorial, you actually have to create a crate that
 exposes some hardware-accelerated functions you want to use in `concrete-core`. For example, your
-Rust crate could be actually wrapping some C/C++ code. It's the example we consider in this
-tutorial: let's consider you've created a crate `fhe-gpu` that exposes some functions:
+Rust crate could actually be wrapping some C/C++ code.
 
-- `get_number_of_gpus`
-- `drop`
-- `malloc`
-- `copy_to_gpu`
+So, let's imagine you've created a crate `fhe-gpu` that exposes some Rust functions to allocate and
+copy data to a GPU. In an actual backend, you'd have to implement some operation-s (
+ciphertext addition, keyswitch, bootstrap), and the data copy from GPU to CPU to get the results
+back. Here we'll only consider four functions:
 
-What we want to do is to pass some data from Rust to some C/C++ functions: we're going to do it
-using void pointers (with some metadata). This is definitely not the only way to do this, maybe not
-the best: we're open to any suggestion for improvement, do not hesitate to contact us!
+- `get_number_of_gpus`: returns the number of GPUs detected on the machine;
+- `malloc`: takes a size as input, and returns a pointer with memory allocated with this size;
+- `copy_to_gpu`: takes a pointer as input, together with a pointer to data on the CPU and a size,
+  and copies the CPU data to the GPU;
+- `drop`: takes a pointer as input, and calls a function to clean memory.
+
+The functions listed above would actually be wrapping C/C++ functions (with some OpenCL or Cuda code
+for the GPU programming). What we need to do is to pass some pointers and integers from Rust to
+the `malloc`, `copy_to_gpu` and `drop` functions.
+
+Now, let's start actually modifying `concrete-core` to plug your crate with it!
 
 ## Add an optional feature
 
-So the first step is to configure `concrete-core`'s manifest to recognize your backend, and be able
-to optionally activate it.
+The first step is to configure `concrete-core`'s manifest to recognize your backend, and be able to
+optionally activate it.
 
 Open `concrete-core`'s `Cargo.toml` file and edit the following section:
 
@@ -124,9 +133,9 @@ and `concrete-core/src/backends/gpu/implementation/entities/mod.rs`
 
 ### Entities
 
-Start by implementing the entities you'll be using. For example, let's imagine we want to be
-manipulating LWE ciphertext vectors on the GPU. We need to create a new
-file: `concrete-core/src/backends/gpu/implementation/entities/lwe_ciphertext_vector.rs`
+Start by implementing the entities you'll be using. Here, we want to allocate and copy data
+corresponding to LWE ciphertext vectors on the GPU. We need to create a new file:
+`concrete-core/src/backends/gpu/implementation/entities/lwe_ciphertext_vector.rs`
 Modify the entity module file, `concrete-core/src/backends/gpu/implementation/entities/mod.rs`, to
 actually link it to the rest of the sources:
 
@@ -140,12 +149,11 @@ pub use lwe_ciphertext_vector::*;
 ```
 
 Now, let's implement that entity. What we want is to implement a `GpuLweCiphertextVector32` entity
-for the `LweCiphertextVectorEntity` trait from the specification.
+for the `LweCiphertextVectorEntity` trait in the specification.
 
-First, in the private module we're going to implement a structure that's going to be wrapped by
-this `GpuLweCiphertextVector32`. That structure is going to contain a void pointer that will
-eventually be allocated on the GPU, and some metadata. For example, you can create a new `lwe.rs`
-file in the `private` module, containing:
+A proposition of implementation is to have `GpuLweCiphertextVector32` wrap a structure containing a
+void pointer for the data on the GPU, and some metadata (LWE dimension, etc.). To do this, create a
+new `lwe.rs` file in the `private` module, containing:
 
 ```asm
 // Fields with `d_` are data in the GPU
@@ -220,16 +228,14 @@ You can do this for all the entity traits you need in your backend.
 
 ### Engines
 
-Now we have some entities, let's actually do something with them. For the GPU backend example, we
-first have to allocate data on the GPU and copy the LWE ciphertext vector from the CPU to the GPU.
+Now we have some entities, let's actually do something with them. For this GPU backend example,
+we're going to allocate data on the GPU and copy the LWE ciphertext vector from the CPU to the GPU.
 
 First, let's create the main engine
-in `concrete-core/src/backends/gpu/implementation/engines/mod.rs`:
-
-Let's imagine you created a `fhe-gpu` crate that exposes a function to get the number of GPUs
-available on the machine, `get_number_of_gpus`. We'll create a `GpuEngine` only in the case where
-that function actually finds at least one GPU. Otherwise, an error will be returned: this example
-also shows you how to define error cases and their display to the user.
+in `concrete-core/src/backends/gpu/implementation/engines/mod.rs`. This `GpuEngine` is only
+successfully created when the `get_number_of_gpus` function finds at least one GPU. Otherwise, an
+error is returned: this example also shows you how to define error cases and their display to the
+user.
 
 ```asm
 use crate::prelude::sealed::AbstractEngineSeal;
@@ -279,6 +285,6 @@ mod lwe_ciphertext_vector_conversion;
 ```
 
 As you see at the bottom of the previous code block, we're going to implement two engine traits: one
-to copy our LWE ciphertext vector from the CPU to the GPU, and one to destroy data on the GPU.
-Create the file `concrete-core/src/backends/gpu/implementation/engines/destruction.rs`
+to copy the LWE ciphertext vector from the CPU to the GPU, and one to destroy data on the GPU.
+Create the files `concrete-core/src/backends/gpu/implementation/engines/destruction.rs`
 and `concrete-core/src/backends/gpu/implementation/engines/lwe_ciphertext_vector_conversion.rs`.
