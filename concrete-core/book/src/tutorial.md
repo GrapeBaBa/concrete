@@ -26,11 +26,11 @@ back. Here we'll only consider four functions:
 - `malloc`: takes a size as input, and returns a pointer with memory allocated with this size;
 - `copy_to_gpu`: takes a pointer as input, together with a pointer to data on the CPU and a size,
   and copies the CPU data to the GPU;
-- `drop`: takes a pointer as input, and calls a function to clean memory.
+- `cuda_drop`: takes a pointer as input, and calls a function to clean memory.
 
 The functions listed above would actually be wrapping C/C++ functions (with some OpenCL or Cuda code
 for the GPU programming). What we need to do is to pass some pointers and integers from Rust to
-the `malloc`, `copy_to_gpu` and `drop` functions.
+the `malloc`, `copy_to_gpu` and `cuda_drop` functions.
 
 Now, let's start actually modifying `concrete-core` to plug your crate with it!
 
@@ -268,16 +268,16 @@ pub struct GpuEngine {}
 impl AbstractEngineSeal for GpuEngine {}
 
 impl AbstractEngine for GpuEngine {
-type EngineError = GpuError;
-
-fn new() -> Result<Self, Self::EngineError> {
-    let number_of_gpus = unsafe { get_number_of_gpus() as usize };
-    if number_of_gpus == 0 {
-        Err(GpuError::DeviceNotFound)
-    } else {
-        Ok(GpuEngine {})
+    type EngineError = GpuError;
+    
+    fn new() -> Result<Self, Self::EngineError> {
+        let number_of_gpus = unsafe { get_number_of_gpus() as usize };
+        if number_of_gpus == 0 {
+            Err(GpuError::DeviceNotFound)
+        } else {
+            Ok(GpuEngine {})
+        }
     }
-}
 }
 
 mod destruction;
@@ -288,3 +288,122 @@ As you see at the bottom of the previous code block, we're going to implement tw
 to copy the LWE ciphertext vector from the CPU to the GPU, and one to destroy data on the GPU.
 Create the files `concrete-core/src/backends/gpu/implementation/engines/destruction.rs`
 and `concrete-core/src/backends/gpu/implementation/engines/lwe_ciphertext_vector_conversion.rs`.
+The `destruction.rs` file is going to look like this:
+
+```asm
+use crate::backends::gpu::implementation::engines::GpuEngine;
+use crate::backends::gpu::implementation::entities::{
+    GpuLweCiphertextVector32,
+};
+use crate::specification::engines::{DestructionEngine, DestructionError};
+use fhe_gpu::cuda_drop;
+
+impl DestructionEngine<GpuLweCiphertextVector32> for GpuEngine {
+    fn destroy(
+        &mut self,
+        entity: GpuLweCiphertextVector32,
+    ) -> Result<(), DestructionError<Self::EngineError>> {
+        unsafe { self.destroy_unchecked(entity) };
+        Ok(())
+    }
+
+    unsafe fn destroy_unchecked(&mut self, entity: GpuLweCiphertextVector32) {
+        // Here deallocate the Gpu memory
+        cuda_drop(entity.0.get_ptr().0).unwrap();
+        }
+    }
+}
+```
+
+Finally, the `lwe_ciphertext_vector_conversion.rs` file is going to contain:
+
+```asm
+use crate::backends::core::entities::LweCiphertextVector64;
+use crate::backends::core::implementation::entities::LweCiphertextVector32;
+use crate::backends::core::private::crypto::lwe::LweList;
+use crate::backends::core::private::math::tensor::{AsRefSlice, AsRefTensor};
+use crate::backends::gpu::implementation::engines::{GpuEngine, GpuError};
+use crate::backends::gpu::implementation::entities::{
+    GpuLweCiphertextVector32,
+};
+use crate::backends::gpu::private::crypto::lwe::list::GpuLweList;
+use crate::specification::engines::{
+    LweCiphertextVectorConversionEngine, LweCiphertextVectorConversionError,
+};
+use crate::specification::entities::LweCiphertextVectorEntity;
+use fhe_gpu::{copy_to_gpu, malloc};
+
+impl From<GpuError> for LweCiphertextVectorConversionError<GpuError> {
+    fn from(err: GpuError) -> Self {
+        Self::Engine(err)
+    }
+}
+
+/// # Description
+/// Convert an LWE ciphertext vector with 32 bits of precision from CPU to GPU.
+///
+impl LweCiphertextVectorConversionEngine<LweCiphertextVector32, GpuLweCiphertextVector32>
+    for GpuEngine
+{
+    fn convert_lwe_ciphertext_vector(
+        &mut self,
+        input: &LweCiphertextVector32,
+    ) -> Result<GpuLweCiphertextVector32, LweCiphertextVectorConversionError<GpuError>> {
+        Ok(unsafe { self.convert_lwe_ciphertext_vector_unchecked(input) })
+    }
+
+    unsafe fn convert_lwe_ciphertext_vector_unchecked(
+        &mut self,
+        input: &LweCiphertextVector32,
+    ) -> GpuLweCiphertextVector32 {
+        let alloc_size = input.lwe_ciphertext_count().0 * input.lwe_dimension().to_lwe_size().0;
+        let input_slice = input.0.as_tensor().as_slice();
+        let d_ptr = malloc::<u32>(alloc_size as u32);
+        copy_to_gpu::<u32>(d_ptr, input_slice, alloc_size);
+        
+        GpuLweCiphertextVector32(GpuLweList::<u32> {
+            d_ptr,
+            lwe_ciphertext_count: input.lwe_ciphertext_count(),
+            lwe_dimension: input.lwe_dimension(),
+            _phantom: Default::default(),
+        })
+    }
+}
+```
+
+Now, a user is able to write:
+
+```asm
+use concrete_commons::dispersion::Variance;
+use concrete_commons::parameters::{LweCiphertextCount, LweDimension};
+use concrete_core::prelude::*;
+
+// DISCLAIMER: the parameters used here are only for test purpose, and are not secure.
+let lwe_dimension = LweDimension(6);
+// Here a hard-set encoding is applied (shift by 20 bits)
+let input = vec![3_u32 << 20; 3];
+let noise = Variance(2_f64.powf(-25.));
+
+let mut core_engine = CoreEngine::new().unwrap();
+let h_key: LweSecretKey32 = core_engine.create_lwe_secret_key(lwe_dimension).unwrap();
+let h_plaintext_vector: PlaintextVector32 = core_engine.create_plaintext_vector(&input).unwrap();
+let mut h_ciphertext_vector: LweCiphertextVector32 =
+    core_engine.encrypt_lwe_ciphertext_vector(&h_key, &h_plaintext_vector, noise).unwrap();
+
+let mut cuda_engine = CudaEngine::new().unwrap();
+let d_ciphertext_vector: CudaLweCiphertextVector32 =
+    cuda_engine.convert_lwe_ciphertext_vector(&h_ciphertext_vector).unwrap();
+
+assert_eq!(d_ciphertext_vector.lwe_dimension(), lwe_dimension);
+assert_eq!(
+    d_ciphertext_vector.lwe_ciphertext_count(),
+    LweCiphertextCount(3)
+);
+
+core_engine.destroy(h_key).unwrap();
+core_engine.destroy(h_plaintext_vector).unwrap();
+core_engine.destroy(h_ciphertext_vector).unwrap();
+cuda_engine.destroy(d_ciphertext_vector).unwrap();
+```
+
+And this converts an LWE ciphertext vector from the CPU to the GPU!
