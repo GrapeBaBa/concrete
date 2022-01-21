@@ -1,23 +1,14 @@
 # Introduction
 
-Welcome to the `concrete-core` guide!
+Welcome to the `concrete-core` guide !
 
-This library contains a set of low-level primitives which can be used to implement *Fully
-Homomorphically Encrypted* (FHE) programs. In a nutshell, fully homomorphic encryption makes it
-possible to perform arbitrary computations over encrypted data. With FHE, you can perform
-computations without putting your trust on third-party computation providers.
-
-## Audience
-
-This library is geared towards people who already know their way around FHE. It gives the user
-freedom of choice over a breadth of parameters, which can lead to less than 128 bits of security
-if chosen incorrectly.
-
-Fortunately, we propose multiple libraries that build on top of `concrete-core` and which
-propose a safer API. To see which one best suits your needs, see the
-[concrete homepage](https://zama.ai/concrete).
+This library contains a set of fast, low-level primitives which can be used to implement *Fully 
+Homomorphically Encrypted* (FHE) programs. In a nutshell, fully homomorphic encryption makes it possible to 
+perform arbitrary computations over encrypted data. With FHE, you can perform computations without putting 
+your trust on third-party computation providers. 
 
 ## Quick start
+
 Here is a quick example of how the library can be used to encrypt an integer and decrypt it:
 
 ```rust
@@ -47,22 +38,35 @@ engine.destroy(ciphertext).unwrap();
 engine.destroy(decrypted_plaintext).unwrap();
 ```
 
-## Architecture
+## Audience
 
-`concrete-core` is a modular library which makes it possible to use different backends to
-perform FHE operations. Its design revolves around two modules:
+The goal of `concrete-core` is to be the intermediate layer where library writers and compiler makers, can 
+access a breadth of fast primitives developed by researchers and hardware designers. As such, this guide
+contains two kinds of tutorials geared towards this two categories of users.
 
-+ The [`specification`] module contains a specification (in the form of traits) of the
-`concrete` FHE scheme. It describes the FHE objects and operators, which are exposed by the
-library.
-+ The [`backends`] module contains various backends implementing all or a part of this scheme.
-These different backends can be activated by feature flags, each making use of different
-hardware or system libraries to make the operations faster.
+### Contributors to the public API
 
-## Activating backends
+If you are a researcher working on a fast FHE algorithm, or a hardware designer who want to accelerate an 
+existing algorithm, you can contribute your code to `concrete-core`. What this gives you is:
++ The `concrete-benchmark` application, which allows to benchmark your implementation in minutes, and compare 
+the results with the existing implementations.
++ The `concrete-test` application, which allows to easily test your implementation, to verify that your 
+implementation is correct.
++ Exposure to external users, which can easily access your implementation, and integrate it within their 
+library or compiler.
 
-The different backends can be activated using the feature flags `backend_*`. The `backend_core`
-contains an engine executing operations on a single thread of the cpu. It is activated by
-default.
+If you are interested in contributing new algorithms, or new hardware accelerations to `concrete-core`, 
+proceed to the [Contributor Guide](architecture.md) section !
 
-In the next section, we'll show you the steps required for the creation of your own backend!
+### Consumers of the public API
+
+If you are a writing a library or a compiler for FHE, you can rely on the public API of `concrete-core` to 
+access a large set of homomorphic operators. To properly use those operators though, you have to know your way 
+around FHE. The API gives you the freedom to control multiple parameters, which can lead to less than 128 
+bits of security if chosen incorrectly. As a rule of thumb, if you did not carefully study the mathematical 
+foundations of FHE, `concrete-core` is probably too low-level for you to use. Fortunately, we propose multiple 
+libraries that build on top of `concrete-core` and which propose a safer API. To see which one best suits your 
+needs, see the [concrete homepage](https://zama.ai/concrete).
+
+If you are interested of building a higher level abstraction using the `concrete-core` api, proceed to the 
+[User Guide](backends.md) section !

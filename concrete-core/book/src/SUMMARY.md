@@ -4,11 +4,7 @@
 
 # User guide
 
-[//]: # (Expliquer qu'il y a des backends et qu'on peut les activer ou pas dans le build il y en un par thread.)
-- [Backend based models](./backends.md)
-
-[//]: # (Then in a few months, we could add a section like that)
-[//]: # (- [Building with concrete-core]&#40;./building.md&#41;)
+- [Specification based architecture](./backends.md)
 
 # Contribution guides
 
